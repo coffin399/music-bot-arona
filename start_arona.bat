@@ -13,7 +13,7 @@ REM Pythonの仮想環境を使用している場合は、activateスクリプ�
 REM 例: set VENV_ACTIVATE_PATH=venv\Scripts\activate.bat
 
 echo =====================================
-echo  Lavalink Music Bot Launcher
+echo  Lavalink Music Bot ARONA Launcher
 echo =====================================
 echo.
 
