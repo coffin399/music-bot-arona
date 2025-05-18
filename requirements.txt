@@ -1,0 +1,7 @@
+# requirements.txt
+
+discord.py>=2.0.0     # discord.py (バージョン2.0以上を推奨)
+wavelink>=3.0.0       # wavelink (discord.pyのバージョンと互換性のあるもの)
+python-dotenv         # .envファイルを使用する場合 (今回はconfig.yamlなので厳密には不要ですが、他のプロジェクトで使う可能性も考慮して残しても良い)
+PyYAML                # config.yamlの読み込みに必要
+PyNaCl                # discord.pyのボイス機能に必要
