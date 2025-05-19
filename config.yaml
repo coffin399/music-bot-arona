@@ -1,22 +1,33 @@
-token: "YOUR_DISCORD_BOT_TOKEN"
+# Discord Bot Token (https://discord.com/developers/applications から取得)
+discord_token: "YOUR_DISCORD_BOT_TOKEN_HERE"
+
+# Lavalinkサーバー設定
+lavalink_host: "127.0.0.1"   # Lavalinkサーバーのホスト (通常はlocalhost)
+lavalink_port: 2333          # Lavalinkサーバーのポート (application.ymlと合わせる)
+lavalink_password: "hogefugapiyoyo" # Lavalinkサーバーのパスワード (application.ymlと合わせる)
+lavalink_identifier: "ARONA" # Lavalinkノードの識別名 (任意)
+
+# BotのPrefix
 prefix: "!!"
 
+# メッセージ文言 (カスタマイズ可能)
 messages:
-  join_voice_channel_first: "まずボイスチャンネルに参加してください。"
-  bot_not_in_voice_channel: "BOTがボイスチャンネルに接続していません。"
-  now_playing: "再生中: {}"
-  added_to_queue: "{} をキューに追加しました。"
-  added_playlist_to_queue: "プレイリストから {} 曲をキューに追加しました。"
+  now_playing: "🎶 再生中: **{title}**"
+  added_to_queue: "📝 キューに追加しました: **{title}**"
   queue_empty: "キューは空です。"
-  skipped: "スキップしました。"
-  stopped: "再生を停止し、ボイスチャンネルから切断しました。"
-  paused: "一時停止しました。"
-  resumed: "再生を再開しました。"
-  error_playing: "再生中にエラーが発生しました: {}"
-  nothing_playing: "現在何も再生していません。"
-  searching_song: "{} を検索中..."
-  song_not_found: "曲が見つかりませんでした。"
-  error_generic: "エラーが発生しました: {}"
-  youtube_search_error: "YouTubeでの検索または情報取得に失敗しました。"
-  download_error: "音声情報の取得に失敗しました。"
-  connect_timeout: "ボイスチャンネルへの接続がタイムアウトしました。"
+  not_connected: "ボイスチャンネルに接続していません。"
+  already_connected: "既にボイスチャンネルに接続しています。"
+  no_results: "😢 「{query}」の検索結果が見つかりませんでした。"
+  error_occurred: "エラーが発生しました: {error}"
+  connected_to_vc: "🔊 **{channel}** に接続しました。"
+  disconnected_from_vc: "👋 ボイスチャンネルから切断しました。"
+  join_vc_first: "先にボイスチャンネルに参加してください。"
+  bot_not_in_vc: "BOTがボイスチャンネルにいません。"
+  nothing_playing: "現在再生中の曲はありません。"
+  skipped: "⏭️ スキップしました。"
+  queue_title: "再生キュー"
+  player_stopped: "⏹️ 再生を停止し、キューをクリアしました。"
+  volume_set: "🔊 ボリュームを **{volume}%** に設定しました。"
+  invalid_volume: "無効なボリューム値です (0-1000)。"
+  must_be_in_vc_with_bot: "BOTと同じボイスチャンネルに参加している必要があります。"
+  cleared_queue: "🗑️ キューをクリアしました。"

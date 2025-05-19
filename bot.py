@@ -1,411 +1,472 @@
 import discord
 from discord.ext import commands
-from discord import app_commands  # スラッシュコマンド用
+import wavelink
 import yaml
-import asyncio
-import yt_dlp
-from collections import deque
-import os  # ファイルパスの確認用
+import logging
+import re # URL判定用
 
+# ロギング設定
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # --- 設定ファイルの読み込み ---
-def load_config():
-    try:
-        with open("config.yaml", 'r', encoding='utf-8') as f:
-            return yaml.safe_load(f)
-    except FileNotFoundError:
-        print("エラー: config.yamlが見つかりません。")
-        exit()
-    except yaml.YAMLError as e:
-        print(f"エラー: config.yamlの読み込みに失敗しました。: {e}")
-        exit()
-
-
-config = load_config()
-TOKEN = config.get('token')
-PREFIX = config.get('prefix', '!!')
-MESSAGES = config.get('messages', {})
-YOUTUBE_COOKIES_FILE = config.get('youtube_cookies_file', '')
-
-if not TOKEN or TOKEN == "YOUR_DISCORD_BOT_TOKEN":
-    print("エラー: config.yaml に有効なDiscord BOTトークンが設定されていません。")
+try:
+    with open("config.yaml", "r", encoding="utf-8") as f:
+        config = yaml.safe_load(f)
+except FileNotFoundError:
+    logger.critical("config.yaml が見つかりません。作成してください。")
+    exit()
+except yaml.YAMLError as e:
+    logger.critical(f"config.yaml の読み込みに失敗しました: {e}")
     exit()
 
-# --- FFmpegオプション ---
-FFMPEG_OPTIONS = {
-    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
-    'options': '-vn'
-}
+TOKEN = config.get("discord_token")
+LAVALINK_HOST = config.get("lavalink_host")
+LAVALINK_PORT = config.get("lavalink_port")
+LAVALINK_PASSWORD = config.get("lavalink_password")
+LAVALINK_IDENTIFIER = config.get("lavalink_identifier", "WavelinkNode")
+PREFIX = config.get("prefix", "!!")
+MESSAGES = config.get("messages", {})
 
-# --- yt-dlpオプション ---
-YDL_OPTS_BASE = {
-    'format': 'bestaudio/best',
-    'quiet': True,
-    'extract_flat': True,
-    'default_search': 'ytsearch',
-    'postprocessors': [{
-        'key': 'FFmpegExtractAudio',
-        'preferredcodec': 'opus',
-        'preferredquality': '192',
-    }],
-    'source_address': '0.0.0.0'
-}
+if not TOKEN:
+    logger.critical("Discordトークンがconfig.yamlに設定されていません。")
+    exit()
 
-# YouTube Cookieファイルの設定
-if YOUTUBE_COOKIES_FILE:
-    if os.path.exists(YOUTUBE_COOKIES_FILE):
-        YDL_OPTS_BASE['cookiefile'] = YOUTUBE_COOKIES_FILE
-        print(MESSAGES.get('youtube_cookie_load_info',
-                           "YouTube Cookieファイルをロードしました。ログイン状態で動作します。"))
-    else:
-        print(MESSAGES.get('youtube_cookie_file_not_found',
-                           "警告: config.yamlで指定されたYouTube Cookieファイルが見つかりません: {} ログインせずに続行します。").format(
-            YOUTUBE_COOKIES_FILE))
-
-# --- BOTの初期設定 ---
+# --- Intents設定 ---
 intents = discord.Intents.default()
 intents.message_content = True
+intents.guilds = True
 intents.voice_states = True
-bot = commands.Bot(command_prefix=PREFIX, intents=intents, help_command=None)  # 標準ヘルプコマンドを無効化
-tree = app_commands.CommandTree(bot)  # スラッシュコマンドツリー
 
-# --- グローバル変数 ---
-queues = {}
-current_song_info = {}
+bot = commands.Bot(command_prefix=PREFIX, intents=intents)
 
+# --- カスタムPlayerクラス ---
+class LavalinkPlayer(wavelink.Player):
+    """wavelink.Playerを拡張したカスタムPlayerクラス"""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.queue = wavelink.Queue()
+        self.text_channel: discord.TextChannel | None = None # コマンドが実行されたチャンネルを保持
 
-# --- ヘルパー関数 (変更なし) ---
-async def play_next(ctx_or_interaction):  # ctxまたはinteractionを受け取れるように
-    guild_id = ctx_or_interaction.guild.id
-    voice_client = discord.utils.get(bot.voice_clients, guild=ctx_or_interaction.guild)
-
-    # メッセージ送信先を判別
-    async def send_message(content):
-        if isinstance(ctx_or_interaction, commands.Context):
-            await ctx_or_interaction.send(content)
-        elif isinstance(ctx_or_interaction, discord.Interaction):
-            # play_nextからは通常、followup.sendを使うか、元のチャンネルIDを保持しておく必要がある
-            # ここでは元のチャンネルに送る (playコマンドのctxからchannelを取得して渡す方が確実)
-            # playコマンド内でchannelを保持して渡すようにする方が良い
-            channel = bot.get_channel(ctx_or_interaction.channel_id)
-            if channel:
-                await channel.send(content)
-            else:  # フォールバック
-                print(f"Warning: Could not find channel {ctx_or_interaction.channel_id} to send play_next message.")
-
-    if guild_id in queues and queues[guild_id]:
-        if not voice_client or not voice_client.is_connected():
-            queues[guild_id].clear()
-            current_song_info.pop(guild_id, None)
+    async def play_next_track(self):
+        """キューから次の曲を再生する"""
+        if self.is_playing() or self.is_paused():
             return
 
-        if voice_client.is_playing() or voice_client.is_paused():
-            return
+        if not self.queue.is_empty:
+            next_track: wavelink.Playable = self.queue.get()
+            await self.play(next_track)
+            if self.text_channel:
+                try:
+                    await self.text_channel.send(MESSAGES.get('now_playing', "🎶 再生中: **{title}**").format(title=next_track.title))
+                except discord.HTTPException:
+                    logger.warning(f"Failed to send 'now_playing' message to {self.text_channel.name}")
+        else:
+            if self.text_channel:
+                # logger.info(f"Queue is empty for guild {self.guild.id}. Consider auto-disconnect.")
+                # 自動切断などの処理をここに入れることも可能
+                pass
 
-        song_data = queues[guild_id].popleft()
-        stream_url = song_data['url']
-        title = song_data['title']
-        webpage_url = song_data['webpage_url']
-
-        try:
-            source = await discord.FFmpegOpusAudio.from_probe(stream_url, **FFMPEG_OPTIONS)
-            # play_next_after_error_check に渡す context/interaction を統一
-            callback_context = ctx_or_interaction
-            voice_client.play(source,
-                              after=lambda e: bot.loop.create_task(play_next_after_error_check(callback_context, e)))
-            current_song_info[guild_id] = {'title': title, 'webpage_url': webpage_url}
-            await send_message(MESSAGES.get('now_playing', "再生中: {}").format(title))
-        except Exception as e:
-            await send_message(MESSAGES.get('error_playing', "再生中にエラーが発生しました: {}").format(e))
-            print(f"Error playing next song: {e}")
-            bot.loop.create_task(play_next_after_error_check(ctx_or_interaction, e))
-    else:
-        current_song_info.pop(guild_id, None)
-
-
-async def play_next_after_error_check(ctx_or_interaction, error):
-    if error:
-        print(f'Player error: {error}')
-    await play_next(ctx_or_interaction)
-
-
-# --- イベント ---
+# --- Botイベント ---
 @bot.event
 async def on_ready():
-    print(f'{bot.user.name} が起動しました！')
-    await bot.change_presence(activity=discord.Game(name=f"音楽再生中 | /help"))
+    logger.info(f'{bot.user} としてログインしました。')
+    logger.info(f"Prefix: {PREFIX}")
+    logger.info(f"Wavelink Version: {wavelink.__version__}")
+    activity = discord.Activity(type=discord.ActivityType.listening, name=f"{PREFIX}help")
+    await bot.change_presence(activity=activity)
+    await setup_wavelink()
+
+async def setup_wavelink():
+    """Wavelinkノードをセットアップして接続する"""
+    logger.info("Lavalinkノードへの接続を試みています...")
+    node = wavelink.Node(
+        uri=f"http://{LAVALINK_HOST}:{LAVALINK_PORT}",
+        password=LAVALINK_PASSWORD,
+        identifier=LAVALINK_IDENTIFIER,
+        # session_id=bot.session_id # discord.py v2.x & wavelink v2.x
+    )
     try:
-        # スラッシュコマンドをグローバルに同期 (全てのサーバーで利用可能)
-        # テスト中は特定のサーバーIDを指定すると反映が早い: guild=discord.Object(id=YOUR_SERVER_ID)
-        synced = await tree.sync()
-        print(f"{len(synced)}個のスラッシュコマンドを同期しました。")
-        for cmd in synced:
-            print(f"- {cmd.name}")
+        # discord.py v2.x and wavelink v2.x/v3.x:
+        await wavelink.Pool.connect(nodes=[node], client=bot, cache_capacity=100)
+        # For wavelink v1.x or older structure:
+        # await wavelink.NodePool.connect(client=bot, nodes=[node])
     except Exception as e:
-        print(f"スラッシュコマンドの同期に失敗しました: {e}")
+        logger.error(f"Lavalinkノードへの接続に失敗しました: {e}")
+        logger.error("Lavalinkサーバーが起動しているか、config.yamlの設定が正しいか確認してください。")
 
-
-# --- スラッシュコマンド ---
-@tree.command(name="help", description="音楽BOTのコマンド一覧を表示します。")
-async def slash_help(interaction: discord.Interaction):
-    embed = discord.Embed(title="音楽BOT コマンド一覧", color=discord.Color.blurple())
-    embed.add_field(name=f"`{PREFIX}play <曲名またはURL>` (`{PREFIX}p`)", value="曲を再生またはキューに追加します。",
-                    inline=False)
-    embed.add_field(name=f"`{PREFIX}skip` (`{PREFIX}s`)", value="現在の曲をスキップします。", inline=False)
-    embed.add_field(name=f"`{PREFIX}stop` (`{PREFIX}leave`, `{PREFIX}disconnect`)",
-                    value="再生を停止し、BOTをVCから切断します。", inline=False)
-    embed.add_field(name=f"`{PREFIX}queue` (`{PREFIX}q`)", value="現在の再生キューを表示します。", inline=False)
-    embed.add_field(name=f"`{PREFIX}nowplaying` (`{PREFIX}np`)", value="現在再生中の曲を表示します。", inline=False)
-    embed.add_field(name=f"`{PREFIX}pause`", value="再生を一時停止します。(サーバー管理者推奨)", inline=False)
-    embed.add_field(name=f"`{PREFIX}resume`", value="一時停止した再生を再開します。(サーバー管理者推奨)", inline=False)
-    embed.set_footer(text=f"Prefix: {PREFIX} | このヘルプはスラッシュコマンド /help です。")
-    await interaction.response.send_message(embed=embed, ephemeral=True)  # ephemeral=Trueで本人にのみ表示
-
-
-# --- プレフィックスコマンド (変更なし、または微調整) ---
-@bot.command(name='play', aliases=['p'])
-async def play(ctx: commands.Context, *, query: str):
-    if not ctx.author.voice:
-        await ctx.send(MESSAGES.get('join_voice_channel_first', "まずボイスチャンネルに参加してください。"))
-        return
-
-    voice_channel = ctx.author.voice.channel
-    voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
-
-    if voice_client is None:
-        try:
-            voice_client = await voice_channel.connect(timeout=10.0, reconnect=True)
-        except asyncio.TimeoutError:
-            await ctx.send(MESSAGES.get('connect_timeout', "ボイスチャンネルへの接続がタイムアウトしました。"))
-            return
-        except Exception as e:
-            await ctx.send(MESSAGES.get('error_generic', "エラーが発生しました: {}").format(e))
-            return
-    elif voice_client.channel != voice_channel:
-        await voice_client.move_to(voice_channel)
-
-    guild_id = ctx.guild.id
-    if guild_id not in queues:
-        queues[guild_id] = deque()
-
-    await ctx.send(MESSAGES.get('searching_song', "{} を検索中...").format(query))
-    loop = asyncio.get_event_loop()
-
-    ydl_opts_to_use = YDL_OPTS_BASE.copy()
-
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts_to_use) as ydl:
-            info = await loop.run_in_executor(None, lambda: ydl.extract_info(query, download=False))
-
-        if not info:
-            await ctx.send(MESSAGES.get('song_not_found', "曲が見つかりませんでした。"))
-            return
-
-        songs_to_add = []
-        if 'entries' in info:
-            if not info['entries']:
-                await ctx.send(MESSAGES.get('song_not_found', "曲が見つかりませんでした。"))
-                return
-
-            is_true_playlist = info.get('extractor_key') and 'playlist' in info.get('extractor_key').lower()
-            is_url_input = query.startswith("http://") or query.startswith("https://")
-
-            if is_url_input and is_true_playlist:
-                for entry in info['entries']:
-                    if entry and entry.get('url') and entry.get('title'):
-                        songs_to_add.append({'url': entry['url'], 'title': entry['title'],
-                                             'webpage_url': entry.get('webpage_url', entry.get('original_url', ''))})
-            elif info['entries']:
-                entry = info['entries'][0]
-                if entry and entry.get('url') and entry.get('title'):
-                    songs_to_add.append({'url': entry['url'], 'title': entry['title'],
-                                         'webpage_url': entry.get('webpage_url', entry.get('original_url', ''))})
-                else:
-                    await ctx.send(MESSAGES.get('song_not_found', "曲が見つかりませんでした。"))
-                    return
-            else:
-                await ctx.send(MESSAGES.get('song_not_found', "曲が見つかりませんでした。"))
-                return
-
-        elif 'url' in info:
-            songs_to_add.append(
-                {'url': info['url'], 'title': info['title'], 'webpage_url': info.get('webpage_url', query)})
-
-        else:
-            await ctx.send(MESSAGES.get('song_not_found', "曲が見つかりませんでした。"))
-            return
-
-        if not songs_to_add:
-            await ctx.send(MESSAGES.get('song_not_found', "曲が見つかりませんでした。"))
-            return
-
-        for song_data in songs_to_add:
-            queues[guild_id].append(song_data)
-
-        if len(songs_to_add) == 1:
-            await ctx.send(
-                MESSAGES.get('added_to_queue', "{} をキューに追加しました。").format(songs_to_add[0]['title']))
-        elif len(songs_to_add) > 1:
-            await ctx.send(
-                MESSAGES.get('added_playlist_to_queue', "プレイリストから {} 曲をキューに追加しました。").format(
-                    len(songs_to_add)))
-
-    except yt_dlp.utils.DownloadError as e:
-        # 特定のエラーメッセージを判別（例：年齢制限など）
-        if "Sign in to confirm your age" in str(e) or "confirm your age" in str(e).lower():
-            await ctx.send(
-                f"この動画は年齢制限があります。config.yamlで `youtube_cookies_file` を設定すると再生できる場合があります。\nエラー詳細: {e}")
-        else:
-            await ctx.send(
-                MESSAGES.get('youtube_search_error', "YouTubeでの検索または情報取得に失敗しました。") + f": {e}")
-        print(f"yt-dlp DownloadError: {e}")
-        return
-    except Exception as e:
-        await ctx.send(MESSAGES.get('error_generic', "エラーが発生しました: {}").format(e))
-        print(f"Generic error in play command: {e}")
-        return
-
-    if not voice_client.is_playing() and not voice_client.is_paused():
-        # play_next に ctx を渡す
-        await play_next(ctx)
-
-
-@bot.command(name='skip', aliases=['s'])
-async def skip(ctx: commands.Context):
-    voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
-    if not voice_client or not voice_client.is_connected():
-        await ctx.send(MESSAGES.get('bot_not_in_voice_channel', "BOTがボイスチャンネルに接続していません。"))
-        return
-
-    if not voice_client.is_playing() and not voice_client.is_paused():
-        await ctx.send(MESSAGES.get('nothing_playing', "現在何も再生していません。"))
-        return
-
-    voice_client.stop()
-    await ctx.send(MESSAGES.get('skipped', "スキップしました。"))
-    # play_next は after コールバックで ctx を伴って呼ばれる
-
-
-@bot.command(name='stop', aliases=['leave', 'disconnect'])
-async def stop(ctx: commands.Context):
-    voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
-    guild_id = ctx.guild.id
-
-    if voice_client and voice_client.is_connected():
-        if guild_id in queues:
-            queues[guild_id].clear()
-        current_song_info.pop(guild_id, None)
-
-        if voice_client.is_playing() or voice_client.is_paused():
-            voice_client.stop()
-
-        await voice_client.disconnect()
-        await ctx.send(MESSAGES.get('stopped', "再生を停止し、ボイスチャンネルから切断しました。"))
-    else:
-        await ctx.send(MESSAGES.get('bot_not_in_voice_channel', "BOTがボイスチャンネルに接続していません。"))
-
-
-@bot.command(name='queue', aliases=['q'])
-async def queue_command(ctx: commands.Context):
-    guild_id = ctx.guild.id
-    embed = discord.Embed(title="再生キュー", color=discord.Color.blue())
-
-    np_text = MESSAGES.get('nothing_playing', "現在何も再生していません。")
-    if guild_id in current_song_info and current_song_info[guild_id]:
-        np_title = current_song_info[guild_id]['title']
-        np_url = current_song_info[guild_id].get('webpage_url', '#')
-        np_text = f"[{np_title}]({np_url})"
-    embed.add_field(name="再生中", value=np_text, inline=False)
-
-    if guild_id not in queues or not queues[guild_id]:
-        if not (guild_id in current_song_info and current_song_info[guild_id]):
-            embed.add_field(name="次の曲", value=MESSAGES.get('queue_empty', "キューは空です。"), inline=False)
-    else:
-        song_list_text = []
-        for i, song_data in enumerate(list(queues[guild_id])[:10]):
-            song_list_text.append(f"{i + 1}. [{song_data['title']}]({song_data.get('webpage_url', '#')})")
-
-        if song_list_text:
-            embed.add_field(name="次の曲", value="\n".join(song_list_text), inline=False)
-        else:
-            embed.add_field(name="次の曲", value=MESSAGES.get('queue_empty', "キューは空です。"), inline=False)
-
-        if len(queues[guild_id]) > 10:
-            embed.set_footer(text=f"他 {len(queues[guild_id]) - 10} 曲がキューにあります。")
-
-    await ctx.send(embed=embed)
-
-
-@bot.command(name='nowplaying', aliases=['np'])
-async def nowplaying(ctx: commands.Context):
-    guild_id = ctx.guild.id
-    if guild_id in current_song_info and current_song_info[guild_id]:
-        title = current_song_info[guild_id]['title']
-        url = current_song_info[guild_id].get('webpage_url', '#')
-        embed = discord.Embed(title="再生中", description=f"[{title}]({url})", color=discord.Color.green())
-        await ctx.send(embed=embed)
-    else:
-        await ctx.send(MESSAGES.get('nothing_playing', "現在何も再生していません。"))
-
-
-@bot.command(name='pause')
-@commands.has_permissions(manage_guild=True)
-async def pause(ctx: commands.Context):
-    voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
-    if voice_client and voice_client.is_playing():
-        voice_client.pause()
-        await ctx.send(MESSAGES.get('paused', "一時停止しました。"))
-    elif voice_client and voice_client.is_paused():
-        await ctx.send("既に一時停止されています。")
-    else:
-        await ctx.send(MESSAGES.get('nothing_playing', "現在何も再生していません。"))
-
-
-@bot.command(name='resume')
-@commands.has_permissions(manage_guild=True)
-async def resume(ctx: commands.Context):
-    voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
-    if voice_client and voice_client.is_paused():
-        voice_client.resume()
-        await ctx.send(MESSAGES.get('resumed', "再生を再開しました。"))
-    elif voice_client and voice_client.is_playing():
-        await ctx.send("既に再生中です。")
-    else:
-        await ctx.send(MESSAGES.get('nothing_playing', "現在何も再生していません。"))
-
-
-# --- エラーハンドリング (変更なし) ---
 @bot.event
-async def on_command_error(ctx, error):
-    if isinstance(error, commands.CommandNotFound):
-        return
-    elif isinstance(error, commands.MissingRequiredArgument):
-        await ctx.send(
-            f"コマンドの引数が不足しています: `{error.param.name}`\n`/help` または `{PREFIX}help {ctx.command.name}` でヘルプを確認してください。")
-    elif isinstance(error, commands.CommandInvokeError):
-        original = error.original
-        print(f"CommandInvokeError: {original}")
-        if isinstance(original, yt_dlp.utils.DownloadError):
-            await ctx.send(MESSAGES.get('youtube_search_error', "YouTubeでの検索または情報取得に失敗しました。"))
-        elif isinstance(original, discord.errors.ClientException) and str(original) == "Already playing audio.":
-            await ctx.send("既に何か再生中です。")
+async def on_wavelink_node_ready(payload: wavelink.NodeReadyEventPayload):
+    node = payload.node
+    logger.info(f"Wavelink Node '{node.identifier}' ({node.version}) is ready.")
+    # if payload.resumed:
+    #     logger.info(f"Node '{node.identifier}' has resumed a previous session.")
+
+@bot.event
+async def on_wavelink_track_end(payload: wavelink.TrackEndEventPayload):
+    player: LavalinkPlayer | None = payload.player
+    reason = payload.reason
+    # logger.info(f"Track ended in guild {player.guild.id if player else 'N/A'}. Reason: {reason}")
+    if player:
+        if reason.may_start_next() or reason == wavelink.TrackEndReason.FINISHED:
+            await player.play_next_track()
+
+@bot.event
+async def on_wavelink_track_exception(payload: wavelink.TrackExceptionEventPayload):
+    player: LavalinkPlayer | None = payload.player
+    track = payload.track
+    error = payload.error
+    logger.error(f"Track '{track.title if track else 'Unknown'}' でエラー: {error}")
+    if player and player.text_channel:
+        await player.text_channel.send(MESSAGES.get('error_occurred', "エラーが発生しました: {error}").format(error=f"曲の再生中に問題が発生しました ({error.message if hasattr(error, 'message') else str(error)[:100]})"))
+    if player:
+        await player.play_next_track() # エラー後も次の曲へ
+
+@bot.event
+async def on_wavelink_track_stuck(payload: wavelink.TrackStuckEventPayload):
+    player: LavalinkPlayer | None = payload.player
+    track = payload.track
+    threshold = payload.threshold_ms
+    logger.warning(f"Track '{track.title if track else 'Unknown'}' got stuck for {threshold}ms.")
+    if player and player.text_channel:
+        await player.text_channel.send(f"⚠️ 曲 '{track.title}' の再生がスタックしました。スキップを試みます。")
+    if player:
+        await player.play_next_track()
+
+# --- 音楽コマンド Cog ---
+class MusicCog(commands.Cog, name="Music"):
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot
+
+    async def cog_check(self, ctx: commands.Context) -> bool:
+        """全てのコマンドの前に実行されるチェック"""
+        if not ctx.guild:
+            await ctx.send("このコマンドはサーバー内でのみ使用できます。")
+            return False
+        return True
+
+    async def get_player(self, ctx: commands.Context, connect_if_none: bool = False) -> LavalinkPlayer | None:
+        """現在のギルドのプレイヤーを取得する。必要なら接続する。"""
+        if not ctx.guild:
+            return None
+
+        player: LavalinkPlayer | None = ctx.voice_client # type: ignore
+        if player is None and connect_if_none:
+            if ctx.author.voice:
+                try:
+                    player = await ctx.author.voice.channel.connect(cls=LavalinkPlayer) # type: ignore
+                    player.text_channel = ctx.channel
+                    await ctx.send(MESSAGES.get('connected_to_vc', "🔊 **{channel}** に接続しました。").format(channel=player.channel.name))
+                except discord.ClientException:
+                    await ctx.send("ボイスチャンネルへの接続に失敗しました。権限を確認してください。")
+                    return None
+                except Exception as e:
+                    logger.error(f"Error connecting to voice channel: {e}")
+                    await ctx.send("ボイスチャンネルへの接続中に予期せぬエラーが発生しました。")
+                    return None
+            else:
+                await ctx.send(MESSAGES.get('join_vc_first', "先にボイスチャンネルに参加してください。"))
+                return None
+        elif player and player.text_channel is None : # 再接続などで text_channel が未設定の場合
+             player.text_channel = ctx.channel
+
+        return player
+
+    @commands.command(name='connect', aliases=['join', 'j'], help="ボイスチャンネルに接続します。")
+    async def connect_command(self, ctx: commands.Context, *, channel: discord.VoiceChannel | None = None):
+        player = await self.get_player(ctx)
+
+        if player and player.is_connected():
+            await ctx.send(MESSAGES.get('already_connected', "既にボイスチャンネルに接続しています。"))
+            return
+
+        if channel:
+            target_channel = channel
+        elif ctx.author.voice:
+            target_channel = ctx.author.voice.channel
         else:
-            await ctx.send(MESSAGES.get('error_generic', "エラーが発生しました: {}").format(original))
-    elif isinstance(error, commands.CheckFailure):
-        await ctx.send("このコマンドを実行する権限がありません。")
-    elif isinstance(error, commands.BadArgument):
-        await ctx.send(
-            f"引数の型が正しくありません。`/help` または `{PREFIX}help {ctx.command.name}` でヘルプを確認してください。")
-    else:
-        print(f'Unhandled error: {error} (Type: {type(error)})')
-        await ctx.send(MESSAGES.get('error_generic', "予期せぬエラーが発生しました: {}").format(error))
+            await ctx.send(MESSAGES.get('join_vc_first', "先にボイスチャンネルに参加してください。"))
+            return
+
+        if target_channel:
+            try:
+                new_player: LavalinkPlayer = await target_channel.connect(cls=LavalinkPlayer) # type: ignore
+                new_player.text_channel = ctx.channel
+                await ctx.send(MESSAGES.get('connected_to_vc', "🔊 **{channel}** に接続しました。").format(channel=target_channel.name))
+            except Exception as e:
+                logger.error(f"Error connecting to {target_channel.name}: {e}")
+                await ctx.send(f"{target_channel.name} への接続に失敗しました。")
 
 
-# --- BOTの実行 ---
+    @commands.command(name='disconnect', aliases=['leave', 'dc'], help="ボイスチャンネルから切断します。")
+    async def disconnect_command(self, ctx: commands.Context):
+        player = await self.get_player(ctx)
+
+        if not player or not player.is_connected():
+            await ctx.send(MESSAGES.get('not_connected', "ボイスチャンネルに接続していません。"))
+            return
+
+        # キューをクリアし、再生を停止
+        player.queue.clear()
+        if player.is_playing() or player.is_paused():
+            await player.stop()
+
+        await player.disconnect()
+        await ctx.send(MESSAGES.get('disconnected_from_vc', "👋 ボイスチャンネルから切断しました。"))
+
+    @commands.command(name='play', aliases=['p'], help="曲を再生します。URLまたは検索クエリを指定。")
+    async def play_command(self, ctx: commands.Context, *, query: str):
+        player = await self.get_player(ctx, connect_if_none=True)
+        if not player:
+            return
+
+        player.text_channel = ctx.channel # コマンド実行チャンネルを更新
+
+        if not query:
+            await ctx.send("再生する曲のタイトルまたはURLを指定してください。")
+            return
+
+        # URLかどうかの簡易判定 (yt-dlpに任せるため、厳密でなくても良い)
+        is_url = re.match(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', query)
+
+        search_query = query
+        if not is_url:
+            # YouTube Music や YouTube で検索する場合、プレフィックスを付与
+            # Lavalink v4以降では ytsearch:, ytmsearch: などが推奨
+            # yt-dlpを直接使う場合、プレフィックスは不要なことが多い
+             if "nicovideo.jp" not in query.lower() and "nico.ms" not in query.lower():
+                 search_query = f"ytsearch:{query}" # LavalinkがYouTubeで検索することを期待
+             # ニコニコ動画のURLでない検索語句は、そのまま渡すか、ytsearch: をつけるかはLavalinkの設定による
+
+        try:
+            tracks: list[wavelink.Playable] | None = await wavelink.Playable.search(search_query)
+
+            if not tracks:
+                await ctx.send(MESSAGES.get('no_results', "😢 「{query}」の検索結果が見つかりませんでした。").format(query=query))
+                return
+
+            track_to_play: wavelink.Playable
+            if isinstance(tracks, list): # Search result
+                track_to_play = tracks[0]
+            else: # Playlist or single track direct URL
+                track_to_play = tracks # Should be a Playable or a Playlist
+
+            if isinstance(track_to_play, wavelink.Playlist):
+                # プレイリストの場合
+                player.queue.extend(track_to_play.tracks)
+                await ctx.send(f"🎶 プレイリスト **{track_to_play.name}** ({len(track_to_play.tracks)}曲) をキューに追加しました。")
+                if not player.is_playing():
+                    await player.play_next_track()
+
+            elif isinstance(track_to_play, wavelink.Playable):
+                # 単一の曲の場合
+                if player.is_playing() or not player.queue.is_empty:
+                    player.queue.put(track_to_play)
+                    await ctx.send(MESSAGES.get('added_to_queue', "📝 キューに追加しました: **{title}**").format(title=track_to_play.title))
+                else:
+                    await player.play(track_to_play)
+                    await ctx.send(MESSAGES.get('now_playing', "🎶 再生中: **{title}**").format(title=track_to_play.title))
+            else:
+                await ctx.send("サポートされていないトラック形式です。")
+
+
+        except wavelink.LavalinkException as e:
+            logger.error(f"Play command Lavalink error: {e}")
+            await ctx.send(MESSAGES.get('error_occurred', "エラーが発生しました: {error}").format(error=str(e)))
+        except Exception as e:
+            logger.error(f"An unexpected error occurred in play command: {e}", exc_info=True)
+            await ctx.send(MESSAGES.get('error_occurred', "予期せぬエラーが発生しました。").format(error=str(e)))
+
+    @commands.command(name='stop', help="再生を停止し、キューをクリアします。")
+    async def stop_command(self, ctx: commands.Context):
+        player = await self.get_player(ctx)
+        if not player or (not player.is_playing() and player.queue.is_empty): # 再生中でもなくキューも空
+            await ctx.send(MESSAGES.get('nothing_playing', "現在再生中の曲はありません。"))
+            return
+
+        player.queue.clear()
+        if player.is_playing() or player.is_paused():
+             await player.stop() # これで on_wavelink_track_end が発火するはず
+
+        await ctx.send(MESSAGES.get('player_stopped', "⏹️ 再生を停止し、キューをクリアしました。"))
+
+    @commands.command(name='skip', aliases=['s', 'next'], help="現在の曲をスキップします。")
+    async def skip_command(self, ctx: commands.Context):
+        player = await self.get_player(ctx)
+        if not player or not player.current: # is_playing() だとポーズ中やバッファリング中に反応しないことがある
+            await ctx.send(MESSAGES.get('nothing_playing', "現在再生中の曲はありません。"))
+            return
+
+        if player.queue.is_empty and not player.current : # currentもなければ本当に何もない
+             await ctx.send(MESSAGES.get('nothing_playing', "現在再生中の曲はありません。"))
+             return
+
+        await ctx.send(MESSAGES.get('skipped', "⏭️ スキップしました。"))
+        await player.stop() # on_wavelink_track_end で次の曲が再生される
+
+    @commands.command(name='queue', aliases=['q', 'list'], help="現在の再生キューを表示します。")
+    async def queue_command(self, ctx: commands.Context):
+        player = await self.get_player(ctx)
+        if not player:
+            await ctx.send(MESSAGES.get('bot_not_in_vc', "BOTがボイスチャンネルにいません。"))
+            return
+
+        if player.queue.is_empty and not player.current:
+            await ctx.send(MESSAGES.get('queue_empty', "キューは空です。"))
+            return
+
+        embed = discord.Embed(title=MESSAGES.get('queue_title', "再生キュー"), color=discord.Color.blue())
+        if player.current:
+            duration_min_sec = f"{player.current.duration // 60000}:{ (player.current.duration // 1000) % 60:02d}"
+            embed.add_field(name="再生中", value=f"[{player.current.title}]({player.current.uri}) ({duration_min_sec})", inline=False)
+
+        if not player.queue.is_empty:
+            queue_list_str = []
+            for i, track in enumerate(list(player.queue)[:10]): # 最大10件表示
+                duration_min_sec = f"{track.duration // 60000}:{ (track.duration // 1000) % 60:02d}"
+                queue_list_str.append(f"{i+1}. [{track.title}]({track.uri}) ({duration_min_sec})")
+
+            if queue_list_str:
+                embed.add_field(name="待機中", value="\n".join(queue_list_str), inline=False)
+            if len(player.queue) > 10:
+                embed.set_footer(text=f"他 {len(player.queue) - 10} 曲...")
+        elif not player.current: # currentもqueueもない場合
+            embed.description = MESSAGES.get('queue_empty', "キューは空です。")
+
+
+        if not embed.fields and not embed.description: # 何もセットされなかった場合
+             await ctx.send(MESSAGES.get('queue_empty', "キューは空です。"))
+        else:
+            await ctx.send(embed=embed)
+
+    @commands.command(name='nowplaying', aliases=['np', 'current'], help="現在再生中の曲を表示します。")
+    async def nowplaying_command(self, ctx: commands.Context):
+        player = await self.get_player(ctx)
+        if not player or not player.current:
+            await ctx.send(MESSAGES.get('nothing_playing', "現在再生中の曲はありません。"))
+            return
+
+        track = player.current
+        embed = discord.Embed(
+            title=MESSAGES.get('now_playing', "🎶 再生中: **{title}**").format(title=track.title),
+            url=track.uri,
+            color=discord.Color.green()
+        )
+        if track.artwork:
+            embed.set_thumbnail(url=track.artwork)
+        elif track.source == "youtube": # ytimg.com からサムネイル取得 (artworkがない場合)
+            embed.set_thumbnail(url=f"https://i.ytimg.com/vi/{track.identifier}/hqdefault.jpg")
+
+
+        embed.add_field(name="アーティスト", value=track.author or "不明", inline=True)
+        duration_min_sec = f"{track.duration // 60000}:{ (track.duration // 1000) % 60:02d}"
+        embed.add_field(name="長さ", value=duration_min_sec, inline=True)
+
+        position = player.position // 1000  # 秒単位
+        duration = track.duration // 1000 # 秒単位
+        if duration > 0:
+            progress_percent = int((position / duration) * 100)
+            bar_length = 20
+            filled_length = int(bar_length * position // duration)
+            bar = '─' * filled_length + '🔵' + '─' * (bar_length - filled_length)
+            pos_min_sec = f"{position // 60}:{position % 60:02d}"
+            embed.add_field(name="再生位置", value=f"`{bar}` [{pos_min_sec} / {duration_min_sec}] ({progress_percent}%)", inline=False)
+
+        if track.requester: # discord.py v2.0
+            requester: discord.User | discord.Member | None = ctx.guild.get_member(track.requester) # type: ignore
+            if requester:
+                embed.set_footer(text=f"リクエスト者: {requester.display_name}", icon_url=requester.display_avatar.url)
+
+        await ctx.send(embed=embed)
+
+    @commands.command(name='volume', aliases=['vol'], help="音量を設定 (0-1000)。引数なしで現在の音量を表示。")
+    async def volume_command(self, ctx: commands.Context, volume: int | None = None):
+        player = await self.get_player(ctx)
+        if not player:
+            await ctx.send(MESSAGES.get('bot_not_in_vc', "BOTがボイスチャンネルにいません。"))
+            return
+
+        if volume is None:
+            await ctx.send(f"現在の音量: **{int(player.volume)}%**") # wavelink.Player.volume は float なのでintに変換
+            return
+
+        if not (0 <= volume <= 1000):
+            await ctx.send(MESSAGES.get('invalid_volume', "無効なボリューム値です (0-1000)。"))
+            return
+
+        await player.set_volume(volume) # wavelink v2/v3
+        # await player.filter(wavelink.Filter(volume=volume/100)) # wavelink v3+ Filterを使った方法
+        await ctx.send(MESSAGES.get('volume_set', "🔊 ボリュームを **{volume}%** に設定しました。").format(volume=volume))
+
+    @commands.command(name='clear', aliases=['clr'], help="再生キューをクリアします。")
+    async def clear_command(self, ctx: commands.Context):
+        player = await self.get_player(ctx)
+        if not player:
+            await ctx.send(MESSAGES.get('bot_not_in_vc', "BOTがボイスチャンネルにいません。"))
+            return
+
+        if player.queue.is_empty:
+            await ctx.send("キューは既に空です。")
+            return
+
+        player.queue.clear()
+        await ctx.send(MESSAGES.get('cleared_queue', "🗑️ キューをクリアしました。"))
+
+    # --- コマンドエラーハンドリング ---
+    @play_command.error
+    @connect_command.error
+    @disconnect_command.error
+    @stop_command.error
+    @skip_command.error
+    @queue_command.error
+    @nowplaying_command.error
+    @volume_command.error
+    @clear_command.error
+    async def music_command_error(self, ctx: commands.Context, error: commands.CommandError):
+        if isinstance(error, commands.MissingRequiredArgument):
+            await ctx.send(f"引数が不足しています: `{error.param.name}`\nコマンドのヘルプ: `{PREFIX}help {ctx.command.qualified_name}`")
+        elif isinstance(error, commands.BadArgument):
+            await ctx.send(f"引数の型が正しくありません。\nコマンドのヘルプ: `{PREFIX}help {ctx.command.qualified_name}`")
+        elif isinstance(error, commands.CommandNotFound):
+            # これはBotレベルで処理されるので、通常ここには来ない
+            pass
+        elif isinstance(error, commands.CheckFailure):
+            # cog_check や other checks failed
+            # メッセージはチェック側で送信済みの場合が多い
+            logger.warning(f"CheckFailure for command {ctx.command.name} by {ctx.author}: {error}")
+        elif isinstance(error, wavelink.LavalinkException):
+            logger.error(f"LavalinkException in {ctx.command.name}: {error}")
+            await ctx.send(MESSAGES.get('error_occurred', "エラーが発生しました: {error}").format(error=f"Lavalinkエラー: {error}"))
+        else:
+            logger.error(f"Unhandled error in command {ctx.command.name}: {error}", exc_info=True)
+            await ctx.send(MESSAGES.get('error_occurred', "コマンド実行中に予期せぬエラーが発生しました。").format(error=str(error)[:1000]))
+
+
+# --- Cogの登録とBotの実行 ---
+async def main():
+    async with bot:
+        try:
+            await bot.add_cog(MusicCog(bot))
+            logger.info("MusicCogをロードしました。")
+        except Exception as e:
+            logger.critical(f"MusicCogのロードに失敗しました: {e}", exc_info=True)
+            return
+
+        try:
+            await bot.start(TOKEN)
+        except discord.LoginFailure:
+            logger.critical("Discordへのログインに失敗しました。トークンが正しいか確認してください。")
+        except discord.PrivilegedIntentsRequired:
+            logger.critical("必要なIntents (Message Contentなど) が有効になっていません。Discord Developer Portalで設定してください。")
+        except Exception as e:
+            logger.critical(f"Botの起動中に予期せぬエラーが発生しました: {e}", exc_info=True)
+
 if __name__ == "__main__":
+    import asyncio
     try:
-        bot.run(TOKEN)
-    except discord.errors.LoginFailure:
-        print("エラー: 無効なトークンです。config.yaml のDiscord BOTトークンを確認してください。")
-    except Exception as e:
-        print(f"BOTの起動中に予期せぬエラーが発生しました: {e}")
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Botを終了します...")
+    finally:
+        # asyncio.run(bot.close()) # bot.startが完了していれば不要
+        pass

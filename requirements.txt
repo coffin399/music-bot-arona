@@ -1,3 +1,4 @@
-discord.py[voice]
-PyYAML
+discord.py>=2.0.0
+wavelink>=3.0.0
+PyYAML>=5.0
 yt-dlp

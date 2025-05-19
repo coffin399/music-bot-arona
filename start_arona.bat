@@ -1,6 +1,7 @@
-python -m pip install -U -r requirements.txt
-echo  ARONA Bot Launcher
 @echo off
-title ARONA Music BOT Console
-python bot.py
+echo START ARONA
+pip install -r requirements.txt
+start java -jar Lavalink.jar
+timeout /t 10 > nul
+start python bot.py
 pause
