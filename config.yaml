@@ -1,69 +1,22 @@
-# config.yaml
+token: "YOUR_DISCORD_BOT_TOKEN"
+prefix: "!!"
 
-discord:
-  token: "YOUR_DISCORD_BOT_TOKEN_HERE"  # あなたのDiscord BOTトークンに置き換えてください
-  prefix: "!"                           # BOTのコマンドプレフィックス
-
-lavalink:
-  host: "localhost"                     # Lavalinkサーバーのホスト
-  port: 2333                            # Lavalinkサーバーのポート
-  password: "youshallnotpass"           # Lavalinkサーバーのパスワード
-  identifier: "MyMusicBotConfigured"    # BOTの識別子 (任意)
-  # Lavalinkサーバーの application.yml と一致させること
-
-# BOTが使用するメッセージ (キーで管理)
 messages:
-  # 一般的なメッセージ
-  error_command_not_found: "🤔 そのコマンドは見つかりませんでした。`{prefix}help`で確認できます。"
-  error_missing_argument: "😕 引数が足りません: `{argument}`\n`{prefix}help {command}`で使い方を確認してください。"
-  error_cooldown: "クールダウン中です。あと {seconds:.2f} 秒お待ちください。"
-  error_generic: "エラーが発生しました: {error}"
-  error_check_failure_guild_only: "このコマンドはサーバー内でのみ使用できます。" # cog_check用
-
-  # MusicCog 関連メッセージ
-  music:
-    voice_channel_needed: "まずボイスチャンネルに参加してください。"
-    connected_to_vc: "{channel_mention} に接続しました。"
-    fail_connect_vc: "ボイスチャンネルへの接続に失敗しました。"
-    timeout_connect_vc: "ボイスチャンネルへの接続がタイムアウトしました。"
-    already_connected: "既に {channel_mention} に接続しています。"
-    moved_to_vc: "{channel_mention} に移動しました。"
-    loading_failed: "曲の読み込みに失敗しました: {error}"
-    search_error: "検索中にエラーが発生しました: {error}"
-    no_song_found: "`{query}` に一致する曲が見つかりませんでした。"
-    playlist_added: "プレイリスト **{playlist_name}** から **{count}** 曲をキューに追加しました。"
-    song_added_to_queue: "キューに **{song_title}** を追加しました。"
-    no_valid_song_or_playlist: "有効な曲またはプレイリストが見つかりませんでした。"
-    queue_empty_on_play: "キューは空です。"
-    error_playing_next: "再生開始中にエラーが発生しました: {error}"
-    now_playing_embed_title: "🎵 再生開始"
-    song_skipped: "**{song_title}** をスキップしました。"
-    no_song_to_skip: "現在再生中の曲はありません。"
-    not_in_vc: "BOTはボイスチャンネルに接続していません。"
-    stopped_and_cleared_queue: "再生を停止し、キューをクリアしました。"
-    disconnected_from_vc: "ボイスチャンネルから切断しました。"
-    queue_is_empty: "再生キューは空です。"
-    queue_embed_title: "🎵 再生キュー"
-    now_playing_in_queue_field: "現在再生中"
-    requested_by_footer: "Requested by: {requester_name}"
-    queue_footer_more: "他 {count} 曲..."
-    queue_footer_empty_else: "キューには他に曲がありません。"
-    queue_footer_total: "全 {count} 曲"
-    now_playing_embed_title_current: "💿 現在再生中"
-    playback_time_field: "再生時間"
-    paused: "⏸️ 再生を一時停止しました。"
-    already_paused: "既に一時停止中です。"
-    resumed: "▶️ 再生を再開しました。"
-    not_paused: "一時停止されていません。"
-    volume_set: "🔊 音量を {volume}% に設定しました。"
-    volume_out_of_range: "音量は0から100の間で指定してください。"
-    loop_off: "🔂 ループを解除しました。"
-    loop_track: "🔁 現在の曲をループします。"
-    loop_queue: "🔁 再生キュー全体をループします。"
-    loop_invalid_mode: "無効なループモードです。`off`, `track`, `queue` のいずれかを指定してください。"
-    shuffled_queue: "🔀 キューをシャッフルしました。"
-    shuffle_fail_empty_queue: "キューが空なのでシャッフルできません。"
-    lavalink_node_ready: "Wavelink Node '{identifier}' is ready!"
-    queue_ended: "再生キューが空になりました。"
-    # エラーメッセージ
-    error_lavalink_load: "音楽の読み込みに失敗しました。URLや検索クエリが正しいか確認してください。\nエラー: `{error}`"
+  join_voice_channel_first: "まずボイスチャンネルに参加してください。"
+  bot_not_in_voice_channel: "BOTがボイスチャンネルに接続していません。"
+  now_playing: "再生中: {}"
+  added_to_queue: "{} をキューに追加しました。"
+  added_playlist_to_queue: "プレイリストから {} 曲をキューに追加しました。"
+  queue_empty: "キューは空です。"
+  skipped: "スキップしました。"
+  stopped: "再生を停止し、ボイスチャンネルから切断しました。"
+  paused: "一時停止しました。"
+  resumed: "再生を再開しました。"
+  error_playing: "再生中にエラーが発生しました: {}"
+  nothing_playing: "現在何も再生していません。"
+  searching_song: "{} を検索中..."
+  song_not_found: "曲が見つかりませんでした。"
+  error_generic: "エラーが発生しました: {}"
+  youtube_search_error: "YouTubeでの検索または情報取得に失敗しました。"
+  download_error: "音声情報の取得に失敗しました。"
+  connect_timeout: "ボイスチャンネルへの接続がタイムアウトしました。"
