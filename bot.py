@@ -50,7 +50,7 @@ class LavalinkPlayer(wavelink.Player):
 
     async def play_next_track(self):
         """キューから次の曲を再生する"""
-        if self.is_playing() or self.is_paused():
+        if self.playing or self.paused:
             return
 
         if not self.queue.is_empty:
@@ -98,9 +98,6 @@ async def setup_wavelink():
 @bot.event
 async def on_wavelink_node_ready(payload: wavelink.NodeReadyEventPayload):
     node = payload.node
-    logger.info(f"Wavelink Node '{node.identifier}' ({node.version}) is ready.")
-    # if payload.resumed:
-    #     logger.info(f"Node '{node.identifier}' has resumed a previous session.")
 
 @bot.event
 async def on_wavelink_track_end(payload: wavelink.TrackEndEventPayload):
@@ -176,7 +173,7 @@ class MusicCog(commands.Cog, name="Music"):
     async def connect_command(self, ctx: commands.Context, *, channel: discord.VoiceChannel | None = None):
         player = await self.get_player(ctx)
 
-        if player and player.is_connected():
+        if player and player.connected:
             await ctx.send(MESSAGES.get('already_connected', "既にボイスチャンネルに接続しています。"))
             return
 
@@ -202,13 +199,13 @@ class MusicCog(commands.Cog, name="Music"):
     async def disconnect_command(self, ctx: commands.Context):
         player = await self.get_player(ctx)
 
-        if not player or not player.is_connected():
+        if not player or not player.connected:
             await ctx.send(MESSAGES.get('not_connected', "ボイスチャンネルに接続していません。"))
             return
 
         # キューをクリアし、再生を停止
         player.queue.clear()
-        if player.is_playing() or player.is_paused():
+        if player.playing or player.paused:
             await player.stop()
 
         await player.disconnect()
@@ -255,12 +252,12 @@ class MusicCog(commands.Cog, name="Music"):
                 # プレイリストの場合
                 player.queue.extend(track_to_play.tracks)
                 await ctx.send(f"🎶 プレイリスト **{track_to_play.name}** ({len(track_to_play.tracks)}曲) をキューに追加しました。")
-                if not player.is_playing():
+                if not player.playing:
                     await player.play_next_track()
 
             elif isinstance(track_to_play, wavelink.Playable):
                 # 単一の曲の場合
-                if player.is_playing() or not player.queue.is_empty:
+                if player.playing or not player.queue.is_empty:
                     player.queue.put(track_to_play)
                     await ctx.send(MESSAGES.get('added_to_queue', "📝 キューに追加しました: **{title}**").format(title=track_to_play.title))
                 else:
@@ -280,12 +277,12 @@ class MusicCog(commands.Cog, name="Music"):
     @commands.command(name='stop', help="再生を停止し、キューをクリアします。")
     async def stop_command(self, ctx: commands.Context):
         player = await self.get_player(ctx)
-        if not player or (not player.is_playing() and player.queue.is_empty): # 再生中でもなくキューも空
+        if not player or (not player.playing and player.queue.is_empty): # 再生中でもなくキューも空
             await ctx.send(MESSAGES.get('nothing_playing', "現在再生中の曲はありません。"))
             return
 
         player.queue.clear()
-        if player.is_playing() or player.is_paused():
+        if player.playing or player.paused:
              await player.stop() # これで on_wavelink_track_end が発火するはず
 
         await ctx.send(MESSAGES.get('player_stopped', "⏹️ 再生を停止し、キューをクリアしました。"))
@@ -293,7 +290,7 @@ class MusicCog(commands.Cog, name="Music"):
     @commands.command(name='skip', aliases=['s', 'next'], help="現在の曲をスキップします。")
     async def skip_command(self, ctx: commands.Context):
         player = await self.get_player(ctx)
-        if not player or not player.current: # is_playing() だとポーズ中やバッファリング中に反応しないことがある
+        if not player or not player.current: # playing だとポーズ中やバッファリング中に反応しないことがある
             await ctx.send(MESSAGES.get('nothing_playing', "現在再生中の曲はありません。"))
             return
 
