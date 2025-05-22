@@ -1,0 +1,19 @@
+# ホワイトリスト形式にします
+
+
+# 全除外
+
+*
+
+# 以下を許可
+
+!.gitignore
+!README.md
+!requirements.txt
+!config.default.yaml
+!start.bat
+!**/*.py
+!services/
+!domain/
+!domain/entity/
+!cogs/
