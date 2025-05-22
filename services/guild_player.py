@@ -51,12 +51,36 @@ class GuildPlayer:
                 done = asyncio.Event()
 
                 def _after(err):
-                    if err:
-                        logger.error(f"Player error: {err}")
-                    done.set()
+                    try:
+                        if err:
+                            logger.error(f"Player error: {err}")
+                        
+                        # Delete local cache file if it exists
+                        if self.current_track and self.current_track.stream_url:
+                            try:
+                                file_path = Path(self.current_track.stream_url)
+                                if file_path.is_file():
+                                    file_path.unlink()
+                                    logger.debug(f"Deleted local cache file: {file_path}")
+                            except Exception as e:
+                                logger.error(f"Error deleting cache file {self.current_track.stream_url}: {e}", exc_info=True)
+                                
+                    finally:
+                        done.set()
 
                 self.voice_client.play(src, after=_after)
-                await done.wait()
+                try:
+                    await done.wait()
+                finally:
+                    # Ensure cleanup in case of cancellation
+                    if hasattr(self, 'current_track') and self.current_track and self.current_track.stream_url:
+                        try:
+                            file_path = Path(self.current_track.stream_url)
+                            if file_path.is_file():
+                                file_path.unlink()
+                                logger.debug(f"Deleted local cache file during cleanup: {file_path}")
+                        except Exception as e:
+                            logger.error(f"Error during cleanup of cache file {self.current_track.stream_url}: {e}", exc_info=True)
                 
             except Exception as e:
                 logger.error(f"Error in player loop: {e}", exc_info=True)

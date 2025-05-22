@@ -26,7 +26,6 @@ COMMON_OPTS: dict = {
          "preferredquality": "0"},
         {"key": "FFmpegMetadata"},
     ],
-    "download_archive": str(CACHE_DIR / "archive.txt"),
     "quiet": False,
     "no_warnings": False,
     "source_address": "0.0.0.0",
@@ -44,7 +43,6 @@ def build_nico_opts(login: bool) -> dict:
 
 
 async def extract(query: str) -> Union[Track, List[Track]]:
-    """query をダウンロードして Track(群) を返す"""
     loop = asyncio.get_running_loop()
     is_nico = _is_nico(query)
     opts    = build_nico_opts(login=not NICO_COOKIE_PATH.exists()) if is_nico else COMMON_OPTS
