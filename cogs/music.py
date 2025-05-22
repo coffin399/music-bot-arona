@@ -190,7 +190,6 @@ class Music(commands.Cog):
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
-        """Bot が蹴られた時のクリーンアップ。"""
         if member.id == self.bot.user.id and before.channel and not after.channel:
             player = self.players.pop(member.guild.id, None)
             if player:
