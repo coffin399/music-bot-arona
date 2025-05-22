@@ -1,33 +1,107 @@
+# guild_player.py
 import asyncio
 import logging
-from typing import Optional
+import random
+from collections import deque
 from pathlib import Path
+from typing import Deque, Optional
+
 import discord
 from domain.entity.track import Track
 
-logger = logging.getLogger('arona.music.player')
+logger = logging.getLogger("arona.music.player")
+
 
 class GuildPlayer:
+
     def __init__(self, guild: discord.Guild, voice_client: discord.VoiceClient):
         self.guild = guild
         self.voice_client = voice_client
-        self.queue: asyncio.Queue[Track] = asyncio.Queue()
-        self.player_task: Optional[asyncio.Task] = None
-        self.current_track: Optional[Track] = None
 
-    async def enqueue(self, track: Track):
-        """Add a track to the queue."""
-        await self.queue.put(track)
+        self._queue: Deque[Track] = deque()
+        self._queue_not_empty = asyncio.Condition()
+
+        self.current_track: Optional[Track] = None
+        self.loop_current: bool = False           # /loop でトグル
+
+        self._player_task: Optional[asyncio.Task] = None
+        self._closed: bool = False
+
+    async def enqueue(self, track: Track | list[Track]) -> None:
+        if isinstance(track, list):
+            async with self._queue_not_empty:
+                self._queue.extend(track)
+                self._queue_not_empty.notify()
+        else:
+            async with self._queue_not_empty:
+                self._queue.append(track)
+                self._queue_not_empty.notify()
+
+    async def dequeue(self) -> Track:
+        async with self._queue_not_empty:
+            while not self._queue and not self._closed:
+                await self._queue_not_empty.wait()
+            if self._closed:
+                raise asyncio.CancelledError
+            return self._queue.popleft()
+
+    def upcoming(self) -> list[Track]:
+        return list(self._queue)
+
+    def clear(self):
+        self._queue.clear()
+
+    def shuffle(self):
+        tmp = list(self._queue)
+        random.shuffle(tmp)
+        self._queue = deque(tmp)
+
+    def remove(self, position: int) -> Track:
+        """0-based index の曲を除去して返す。"""
+        if position < 0 or position >= len(self._queue):
+            raise IndexError
+        tmp = list(self._queue)
+        track = tmp.pop(position)
+        self._queue = deque(tmp)
         return track
 
-    async def player_loop(self):
-        """The main player loop that processes tracks from the queue."""
-        while True:
-            try:
-                self.current_track = await self.queue.get()
-                
-                if not self.voice_client.is_connected():
-                    break
+    def is_playing(self) -> bool:
+        return self.voice_client.is_playing()
+
+    def is_paused(self) -> bool:
+        return self.voice_client.is_paused()
+
+    def start(self):
+        if not self._player_task or self._player_task.done():
+            self._player_task = asyncio.create_task(self._player_loop(), name=f"player:{self.guild.id}")
+
+    async def stop(self):
+        self._closed = True
+        if self._player_task and not self._player_task.done():
+            self._player_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._player_task
+        if self.voice_client.is_connected():
+            await self.voice_client.disconnect()
+
+    def pause(self):
+        if self.voice_client.is_playing():
+            self.voice_client.pause()
+
+    def resume(self):
+        if self.voice_client.is_paused():
+            self.voice_client.resume()
+
+    def skip(self):
+        if self.voice_client.is_playing() or self.voice_client.is_paused():
+            self.voice_client.stop()
+
+    # Internal
+    async def _player_loop(self):
+        try:
+            while not self._closed:
+                if not self.loop_current or not self.current_track:
+                    self.current_track = await self.dequeue()
 
                 if Path(self.current_track.stream_url).is_file():
                     src = discord.FFmpegPCMAudio(
@@ -37,88 +111,36 @@ class GuildPlayer:
                     )
                 else:
                     ffmpeg_opts = {
-                        "before_options": (
-                            "-nostdin "
-                            "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
-                        ),
+                        "before_options": "-nostdin -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
                         "options": "-vn",
                     }
-                    src = await discord.FFmpegOpusAudio.from_probe(
-                        self.current_track.stream_url,
-                        **ffmpeg_opts
-                    )
-                
+                    src = await discord.FFmpegOpusAudio.from_probe(self.current_track.stream_url, **ffmpeg_opts)
+
                 done = asyncio.Event()
 
-                def _after(err):
+                def _after(err: Optional[Exception]):
                     try:
                         if err:
-                            logger.error(f"Player error: {err}")
-                        
-                        # Delete local cache file if it exists
-                        if self.current_track and self.current_track.stream_url:
-                            try:
-                                file_path = Path(self.current_track.stream_url)
-                                if file_path.is_file():
-                                    file_path.unlink()
-                                    logger.debug(f"Deleted local cache file: {file_path}")
-                            except Exception as e:
-                                logger.error(f"Error deleting cache file {self.current_track.stream_url}: {e}", exc_info=True)
-                                
+                            logger.error(f"Player error: {err}", exc_info=True)
+
+                        try:
+                            p = Path(self.current_track.stream_url)
+                            if p.is_file():
+                                p.unlink(missing_ok=True)
+                        except Exception as e:
+                            logger.warning(f"Failed to delete cache: {e}", exc_info=True)
                     finally:
                         done.set()
 
                 self.voice_client.play(src, after=_after)
-                try:
-                    await done.wait()
-                finally:
-                    # Ensure cleanup in case of cancellation
-                    if hasattr(self, 'current_track') and self.current_track and self.current_track.stream_url:
-                        try:
-                            file_path = Path(self.current_track.stream_url)
-                            if file_path.is_file():
-                                file_path.unlink()
-                                logger.debug(f"Deleted local cache file during cleanup: {file_path}")
-                        except Exception as e:
-                            logger.error(f"Error during cleanup of cache file {self.current_track.stream_url}: {e}", exc_info=True)
-                
-            except Exception as e:
-                logger.error(f"Error in player loop: {e}", exc_info=True)
-                await asyncio.sleep(1)
+                await done.wait()
 
-    def start(self):
-        """Start the player loop."""
-        if self.player_task is None or self.player_task.done():
-            self.player_task = asyncio.create_task(self.player_loop())
-
-    async def stop(self):
-        """Stop the player and clean up resources."""
-        if self.player_task and not self.player_task.done():
-            self.player_task.cancel()
-            try:
-                await self.player_task
-            except asyncio.CancelledError:
-                pass
-            self.player_task = None
-
-        if self.voice_client.is_connected():
-            await self.voice_client.disconnect()
-
-    def is_playing(self) -> bool:
-        """Check if the player is currently playing a track."""
-        return self.voice_client.is_playing() or self.voice_client.is_paused()
-
-    def pause(self):
-        """Pause the current track."""
-        if self.voice_client.is_playing():
-            self.voice_client.pause()
-
-    def resume(self):
-        """Resume the current track."""
-        if self.voice_client.is_paused():
-            self.voice_client.resume()
-
-    def skip(self):
-        """Skip the current track."""
-        if self.voice_client.is_playing() or self.voice_client.is_paused():
-            self.voice_client.stop()
+                if not self.loop_current:
+                    self.current_track = None
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.error("Fatal error in player loop", exc_info=True)
+            await asyncio.sleep(5)
+            if not self._closed:
+                self._player_task = asyncio.create_task(self._player_loop())

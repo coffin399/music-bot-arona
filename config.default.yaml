@@ -8,8 +8,6 @@ messages:
   no_voice_channel: "You need to be in a voice channel to use this command."
   
 yt_dlp:
-  cookies_file: "cookies.txt"
-
   source_address: "0.0.0.0"
 
 ffmpeg:
