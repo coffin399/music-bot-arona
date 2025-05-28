@@ -12,7 +12,6 @@ logger = logging.getLogger("arona.music")
 
 
 class Music(commands.Cog):
-    """/play だけでなく /queue /shuffle /remove /clear /loop などをフル実装。"""
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
