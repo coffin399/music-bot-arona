@@ -104,15 +104,15 @@ class GuildPlayer:
                     self.current_track = await self.dequeue()
 
                 if Path(self.current_track.stream_url).is_file():
-                    src = discord.FFmpegPCMAudio(
-                        source=self.current_track.stream_url,
+                    src = await discord.FFmpegOpusAudio.from_probe(
+                        str(self.current_track.stream_url),
                         before_options="-nostdin",
-                        options="-vn",
+                        options="-vn -acodec copy -b:a 192k",
                     )
                 else:
                     ffmpeg_opts = {
                         "before_options": "-nostdin -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-                        "options": "-vn",
+                        "options": "-vn -acodec copy -b:a 192k",
                     }
                     src = await discord.FFmpegOpusAudio.from_probe(self.current_track.stream_url, **ffmpeg_opts)
 

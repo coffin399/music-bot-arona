@@ -20,7 +20,7 @@ NICO_COOKIE_PATH = Path("./nico_cookies.txt")
 NICO_COOKIE_PATH.touch(exist_ok=True)
 
 COMMON_OPTS: dict = {
-    "format": "bestaudio[ext=m4a]/bestaudio/best",
+    "format": "bestaudio[acodec=opus][asr=48000]/bestaudio/best",
     "quiet": True,
     "no_warnings": True,
     "concurrent_fragment_downloads": 4,
