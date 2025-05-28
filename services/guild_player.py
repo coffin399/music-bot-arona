@@ -115,7 +115,7 @@ class GuildPlayer:
                         continue
 
                 if Path(self.current_track.stream_url).is_file():
-                    src = await discord.FFmpegAudio.from_probe(
+                    src = await discord.FFmpegOpusAudio.from_probe(
                         str(self.current_track.stream_url),
                         before_options="-nostdin",
                         options="-vn -acodec copy -b:a 192k",
@@ -125,7 +125,7 @@ class GuildPlayer:
                         "before_options": "-nostdin -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
                         "options": "-vn -acodec copy -b:a 192k",
                     }
-                    src = await discord.FFmpegAudio.from_probe(self.current_track.stream_url, **ffmpeg_opts)
+                    src = await discord.FFmpegOpusAudio.from_probe(self.current_track.stream_url, **ffmpeg_opts)
 
                 done = asyncio.Event()
 
