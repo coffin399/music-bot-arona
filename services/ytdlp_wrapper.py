@@ -87,7 +87,7 @@ async def ensure_stream(track: Track) -> Track:
 
     loop = asyncio.get_running_loop()
     def _run():
-        ytdl = yt_dlp.YoutubeDL(COMMON_OPTS | {"noplaylist": True, "extract_flat": False})
+        ytdl = yt_dlp.YoutubeDL(COMMON_OPTS | {"noplaylist": False, "extract_flat": "in_playlist", "skip_download": True})
         info = ytdl.extract_info(track.url, download=False)
         return info["url"]
 
@@ -107,7 +107,7 @@ async def extract(query: str, *, shuffle_playlist: bool = False) -> Union[Track,
         download = True
     else:
         noplaylist = False
-        opts = COMMON_OPTS | {"noplaylist": noplaylist, "extract_flat": False}
+        opts = COMMON_OPTS | {"noplaylist": noplaylist, "extract_flat": "in_playlist", "skip_download": True}
         download = False
 
     def _run() -> tuple[dict, yt_dlp.YoutubeDL]:

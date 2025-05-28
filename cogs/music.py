@@ -1,5 +1,9 @@
 # music.py
 import logging
+import asyncio
+import random
+import contextlib
+
 from typing import Optional
 
 import discord
