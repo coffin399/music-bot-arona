@@ -63,10 +63,14 @@ class Music(commands.Cog):
             return
 
         if isinstance(tracks, list):
-            for t in tracks:
-                t.requester_id = ctx.author.id
-            await player.enqueue(tracks)
             await ctx.reply(config.get_message("playlist_added", count=len(tracks)), silent=True)
+
+            async def _feed():
+                for t in tracks:
+                    t.requester_id = ctx.author.id
+                    await player.enqueue(t)
+                    await asyncio.sleep(random.uniform(1, 3))
+            asyncio.create_task(_feed(), name=f"enqueue:{ctx.guild.id}")
         else:
             tracks.requester_id = ctx.author.id
             await player.enqueue(tracks)

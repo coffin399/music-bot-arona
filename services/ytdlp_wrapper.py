@@ -21,6 +21,10 @@ NICO_COOKIE_PATH.touch(exist_ok=True)
 
 COMMON_OPTS: dict = {
     "format": "bestaudio[acodec=opus][asr=48000]/bestaudio/best",
+    "sleep_requests": 1,
+    "sleep_interval": 1,
+    "max_sleep_interval": 3,
+    "random_sleep": True,
     "quiet": True,
     "no_warnings": True,
     "concurrent_fragment_downloads": 4,
@@ -66,15 +70,32 @@ def _inject_local_path(entry: dict, ytdl: yt_dlp.YoutubeDL):
         entry["local_path"] = Path(ytdl.prepare_filename(entry)).with_suffix(".mp3")
 
 
-def _entry_to_track(entry: dict, *, downloaded: bool) -> Track:
+def _entry_to_track(entry: dict, *, downloaded: bool):
     return Track(
-        title=entry.get("title"),
-        url=entry.get("webpage_url"),
-        stream_url=str(entry["local_path"] if downloaded else entry["url"]),
+        url=entry["url"],
+        title=entry.get("title", "No title"),
         duration=entry.get("duration") or 0,
         thumbnail=entry.get("thumbnail"),
+        stream_url=entry.get("url") if downloaded else None,
         requester_id=0,
     )
+
+
+async def ensure_stream(track: Track) -> Track:
+    if track.stream_url:
+        return track
+
+    loop = asyncio.get_running_loop()
+    def _run():
+        ytdl = yt_dlp.YoutubeDL(COMMON_OPTS | {"noplaylist": True, "extract_flat": False})
+        info = ytdl.extract_info(track.url, download=False)
+        return info["url"]
+
+    try:
+        track.stream_url = await loop.run_in_executor(None, _run)
+    except ExtractorError as e:
+        raise RuntimeError(f"stream 解決失敗: {e}") from e
+    return track
 
 
 async def extract(query: str, *, shuffle_playlist: bool = False) -> Union[Track, List[Track]]:

@@ -1,5 +1,6 @@
 # guild_player.py
 import asyncio
+import asyncio
 import logging
 import random
 from collections import deque
@@ -7,6 +8,8 @@ from pathlib import Path
 from typing import Deque, Optional
 
 import discord
+
+from services import ytdlp_wrapper as ytdl
 from domain.entity.track import Track
 
 logger = logging.getLogger("arona.music.player")
@@ -103,8 +106,16 @@ class GuildPlayer:
                 if not self.loop_current or not self.current_track:
                     self.current_track = await self.dequeue()
 
+                if not self.current_track.stream_url or "youtube.com" in self.current_track.stream_url:
+                    try:
+                        self.current_track = await ytdl.ensure_stream(self.current_track)
+                        await asyncio.sleep(random.uniform(1, 2))
+                    except Exception as e:
+                        logger.error("stream 解決失敗", exc_info=True)
+                        continue
+
                 if Path(self.current_track.stream_url).is_file():
-                    src = await discord.FFmpegOpusAudio.from_probe(
+                    src = await discord.FFmpegAudio.from_probe(
                         str(self.current_track.stream_url),
                         before_options="-nostdin",
                         options="-vn -acodec copy -b:a 192k",
@@ -114,7 +125,7 @@ class GuildPlayer:
                         "before_options": "-nostdin -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
                         "options": "-vn -acodec copy -b:a 192k",
                     }
-                    src = await discord.FFmpegOpusAudio.from_probe(self.current_track.stream_url, **ffmpeg_opts)
+                    src = await discord.FFmpegAudio.from_probe(self.current_track.stream_url, **ffmpeg_opts)
 
                 done = asyncio.Event()
 
