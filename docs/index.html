@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Music Bot Arona - Discord音楽ボット</title>
+    <meta name="description" content="誰でも簡単にDiscord上で音楽を再生できる高機能な音楽ボット">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-logo">
+                <i class="fas fa-music"></i>
+                <span>Music Bot Arona</span>
+            </div>
+            <div class="nav-menu">
+                <a href="#features" class="nav-link">機能</a>
+                <a href="#installation" class="nav-link">インストール</a>
+                <a href="#usage" class="nav-link">使い方</a>
+                <a href="#commands" class="nav-link">コマンド</a>
+                <a href="#config" class="nav-link">設定</a>
+                <a href="https://github.com/coffin399/music-bot-arona" class="nav-link github-link" target="_blank">
+                    <i class="fab fa-github"></i> GitHub
+                </a>
+            </div>
+            <div class="hamburger">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-container">
+            <div class="hero-content">
+                <h1 class="hero-title">
+                    <span class="gradient-text">Music Bot Arona</span>
+                </h1>
+                <p class="hero-subtitle">
+                    誰でも簡単にDiscord上で音楽を再生
+                </p>
+                <p class="hero-description">
+                    YouTube、ニコニコ動画、SoundCloudなどから音楽を再生できる高機能なDiscord音楽ボット。
+                    シンプルなコマンドで、あなたのサーバーに音楽の楽しさをもたらします。
+                </p>
+                <div class="hero-buttons">
+                    <a href="#installation" class="btn btn-primary">
+                        <i class="fas fa-download"></i>
+                        今すぐ始める
+                    </a>
+                    <a href="#features" class="btn btn-secondary">
+                        <i class="fas fa-star"></i>
+                        機能を見る
+                    </a>
+                </div>
+            </div>
+            <div class="hero-visual">
+                <div class="discord-mockup">
+                    <div class="discord-header">
+                        <div class="discord-title">Music Bot Arona</div>
+                        <div class="discord-status online"></div>
+                    </div>
+                    <div class="discord-content">
+                        <div class="discord-message">
+                            <div class="discord-avatar">
+                                <i class="fas fa-music"></i>
+                            </div>
+                            <div class="discord-text">
+                                <div class="discord-username">Music Bot Arona</div>
+                                <div class="discord-message-content">
+                                    <div class="now-playing">
+                                        <div class="track-info">
+                                            <div class="track-title">素晴らしい音楽</div>
+                                            <div class="track-artist">アーティスト名</div>
+                                        </div>
+                                        <div class="progress-bar">
+                                            <div class="progress-fill"></div>
+                                        </div>
+                                        <div class="track-time">1:23 / 3:45</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="features">
+        <div class="container">
+            <h2 class="section-title">主な機能</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-play-circle"></i>
+                    </div>
+                    <h3>高品質音楽再生</h3>
+                    <p>YouTube、ニコニコ動画、SoundCloudなど、様々なプラットフォームから高品質な音楽を再生</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-list"></i>
+                    </div>
+                    <h3>キュー管理</h3>
+                    <p>再生キューを効率的に管理。シャッフル、削除、クリアなどの機能を搭載</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-volume-up"></i>
+                    </div>
+                    <h3>音量制御</h3>
+                    <p>0-200%の範囲で音量を調整可能。リアルタイムでの音量変更に対応</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-redo"></i>
+                    </div>
+                    <h3>ループ再生</h3>
+                    <p>現在の曲、またはキュー全体のループ再生に対応。3つのモードから選択可能</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-search"></i>
+                    </div>
+                    <h3>検索機能</h3>
+                    <p>曲名やアーティスト名で検索。URLを直接指定することも可能</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-cog"></i>
+                    </div>
+                    <h3>カスタマイズ</h3>
+                    <p>設定ファイルでボットの動作をカスタマイズ。メッセージや動作を自由に設定</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Installation Section -->
+    <section id="installation" class="installation">
+        <div class="container">
+            <h2 class="section-title">インストール手順</h2>
+            <div class="installation-steps">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h3>必要な環境</h3>
+                        <ul>
+                            <li>Python 3.8以上</li>
+                            <li>FFmpeg（音声処理用）</li>
+                            <li>Discord Bot Token</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h3>パッケージのインストール</h3>
+                        <div class="code-block">
+                            <code>pip install -r requirements.txt</code>
+                        </div>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <h3>FFmpegのインストール</h3>
+                        <div class="platform-tabs">
+                            <button class="tab-btn active" data-platform="windows">Windows</button>
+                            <button class="tab-btn" data-platform="linux">Linux</button>
+                            <button class="tab-btn" data-platform="mac">Mac</button>
+                        </div>
+                        <div class="tab-content active" id="windows">
+                            <p>1. <a href="https://ffmpeg.org/download.html" target="_blank">FFmpeg公式サイト</a>からダウンロード</p>
+                            <p>2. PATHに追加するか、config.yamlでffmpeg_pathを指定</p>
+                        </div>
+                        <div class="tab-content" id="linux">
+                            <div class="code-block">
+                                <code>sudo apt update && sudo apt install ffmpeg</code>
+                            </div>
+                        </div>
+                        <div class="tab-content" id="mac">
+                            <div class="code-block">
+                                <code>brew install ffmpeg</code>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">4</div>
+                    <div class="step-content">
+                        <h3>Discord Botの作成</h3>
+                        <ol>
+                            <li><a href="https://discord.com/developers/applications" target="_blank">Discord Developer Portal</a>にアクセス</li>
+                            <li>「New Application」をクリックしてアプリケーションを作成</li>
+                            <li>左メニューの「Bot」をクリック</li>
+                            <li>「Add Bot」をクリックしてBotを作成</li>
+                            <li>「Token」をコピーして保存</li>
+                        </ol>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">5</div>
+                    <div class="step-content">
+                        <h3>設定ファイルの作成</h3>
+                        <div class="code-block">
+                            <code>cp config.default.yaml config.yaml</code>
+                        </div>
+                        <p>config.yamlのtokenをあなたのBotトークンに変更してください。</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">6</div>
+                    <div class="step-content">
+                        <h3>ボットの起動</h3>
+                        <div class="code-block">
+                            <code>python bot.py</code>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Usage Section -->
+    <section id="usage" class="usage">
+        <div class="container">
+            <h2 class="section-title">基本的な使い方</h2>
+            <div class="usage-content">
+                <div class="usage-step">
+                    <div class="usage-icon">
+                        <i class="fas fa-user-plus"></i>
+                    </div>
+                    <div class="usage-text">
+                        <h3>1. ボットをサーバーに招待</h3>
+                        <p>OAuth2 URL Generatorで必要な権限を設定し、ボットをサーバーに招待します。</p>
+                        <div class="permissions-list">
+                            <span class="permission">Send Messages</span>
+                            <span class="permission">Embed Links</span>
+                            <span class="permission">Connect</span>
+                            <span class="permission">Speak</span>
+                            <span class="permission">Use Voice Activity</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="usage-step">
+                    <div class="usage-icon">
+                        <i class="fas fa-microphone"></i>
+                    </div>
+                    <div class="usage-text">
+                        <h3>2. ボイスチャンネルに参加</h3>
+                        <p>音楽を再生したいボイスチャンネルに参加してください。</p>
+                    </div>
+                </div>
+                <div class="usage-step">
+                    <div class="usage-icon">
+                        <i class="fas fa-play"></i>
+                    </div>
+                    <div class="usage-text">
+                        <h3>3. 音楽を再生</h3>
+                        <p><code>/play 曲名</code>または<code>/play URL</code>で音楽を再生できます。</p>
+                        <div class="example-commands">
+                            <div class="example-command">
+                                <code>/play 素晴らしい音楽</code>
+                                <span>曲名で検索</span>
+                            </div>
+                            <div class="example-command">
+                                <code>/play https://youtube.com/watch?v=...</code>
+                                <span>URLで直接再生</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Commands Section -->
+    <section id="commands" class="commands">
+        <div class="container">
+            <h2 class="section-title">コマンド一覧</h2>
+            <div class="commands-grid">
+                <div class="command-category">
+                    <h3><i class="fas fa-play-circle"></i> 再生コントロール</h3>
+                    <div class="command-list">
+                        <div class="command-item">
+                            <code>/play &lt;曲名またはURL&gt;</code>
+                            <span>曲を再生またはキューに追加</span>
+                        </div>
+                        <div class="command-item">
+                            <code>/pause</code>
+                            <span>一時停止</span>
+                        </div>
+                        <div class="command-item">
+                            <code>/resume</code>
+                            <span>再生再開</span>
+                        </div>
+                        <div class="command-item">
+                            <code>/stop</code>
+                            <span>再生停止＆キュークリア</span>
+                        </div>
+                        <div class="command-item">
+                            <code>/skip</code>
+                            <span>現在の曲をスキップ</span>
+                        </div>
+                        <div class="command-item">
+                            <code>/seek &lt;時間&gt;</code>
+                            <span>指定時刻に移動</span>
+                        </div>
+                        <div class="command-item">
+                            <code>/volume &lt;0-200&gt;</code>
+                            <span>音量変更</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="command-category">
+                    <h3><i class="fas fa-list"></i> キュー管理</h3>
+                    <div class="command-list">
+                        <div class="command-item">
+                            <code>/queue</code>
+                            <span>キューを表示</span>
+                        </div>
+                        <div class="command-item">
+                            <code>/nowplaying</code>
+                            <span>現在再生中の曲を表示</span>
+                        </div>
+                        <div class="command-item">
+                            <code>/shuffle</code>
+                            <span>キューをシャッフル</span>
+                        </div>
+                        <div class="command-item">
+                            <code>/clear</code>
+                            <span>キューをクリア</span>
+                        </div>
+                        <div class="command-item">
+                            <code>/remove &lt;番号&gt;</code>
+                            <span>指定番号の曲を削除</span>
+                        </div>
+                        <div class="command-item">
+                            <code>/loop &lt;off/one/all&gt;</code>
+                            <span>ループモード設定</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="command-category">
+                    <h3><i class="fas fa-microphone"></i> ボイスチャンネル</h3>
+                    <div class="command-list">
+                        <div class="command-item">
+                            <code>/join</code>
+                            <span>ボイスチャンネルに接続</span>
+                        </div>
+                        <div class="command-item">
+                            <code>/leave</code>
+                            <span>ボイスチャンネルから切断</span>
+                        </div>
+                        <div class="command-item">
+                            <code>/music_help</code>
+                            <span>ヘルプを表示</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Configuration Section -->
+    <section id="config" class="configuration">
+        <div class="container">
+            <h2 class="section-title">設定ファイル</h2>
+            <div class="config-content">
+                <div class="config-description">
+                    <p>config.yamlファイルでボットの動作をカスタマイズできます。</p>
+                </div>
+                <div class="config-example">
+                    <h3>設定例</h3>
+                    <div class="code-block">
+                        <pre><code># Discord Bot Token
+token: "YOUR_BOT_TOKEN_HERE"
+
+# Bot設定
+prefix: "!"
+
+# 音楽設定
+music:
+  ffmpeg_path: "ffmpeg"           # FFmpegのパス
+  auto_leave_timeout: 300         # 自動退出までの秒数
+  max_queue_size: 1000            # 最大キューサイズ
+  default_volume: 20              # デフォルト音量 (0-200)
+  max_guilds: 100000000           # 最大サーバー数
+  inactive_timeout_minutes: 30    # 非アクティブタイムアウト（分）
+  ffmpeg_before_options: "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
+  ffmpeg_options: "-vn"</code></pre>
+                    </div>
+                </div>
+                <div class="config-options">
+                    <h3>主要設定項目</h3>
+                    <div class="config-grid">
+                        <div class="config-item">
+                            <h4>ffmpeg_path</h4>
+                            <p>FFmpegの実行ファイルのパスを指定</p>
+                        </div>
+                        <div class="config-item">
+                            <h4>auto_leave_timeout</h4>
+                            <p>ボイスチャンネルが空になった時の自動退出までの秒数</p>
+                        </div>
+                        <div class="config-item">
+                            <h4>max_queue_size</h4>
+                            <p>キューに追加できる最大曲数</p>
+                        </div>
+                        <div class="config-item">
+                            <h4>default_volume</h4>
+                            <p>ボット起動時のデフォルト音量（0-200）</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h3>Music Bot Arona</h3>
+                    <p>誰でも簡単にDiscord上で音楽を再生</p>
+                </div>
+                <div class="footer-section">
+                    <h4>リンク</h4>
+                    <ul>
+                        <li><a href="https://github.com/coffin399/music-bot-arona" target="_blank">GitHub</a></li>
+                        <li><a href="https://discord.com/developers/applications" target="_blank">Discord Developer Portal</a></li>
+                        <li><a href="https://ffmpeg.org/" target="_blank">FFmpeg</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>サポート</h4>
+                    <ul>
+                        <li><a href="#installation">インストール</a></li>
+                        <li><a href="#usage">使い方</a></li>
+                        <li><a href="#commands">コマンド</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2024 Music Bot Arona. MIT License.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>

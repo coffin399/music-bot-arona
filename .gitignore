@@ -17,3 +17,5 @@
 !domain/
 !domain/entity/
 !cogs/
+!docs/
+!docs/**/*
