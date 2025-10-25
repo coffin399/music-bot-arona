@@ -17,14 +17,14 @@ Discord上で音楽を再生できる単独動作型のBotプログラムです�
 ### 1. 必要なパッケージをインストール
 
 ```bash
-pip install discord.py yt-dlp
+pip install -r requirements.txt
 ```
 
 ### 2. FFmpegをインストール
 
 **Windows:**
 1. [FFmpeg公式サイト](https://ffmpeg.org/download.html)からダウンロード
-2. PATHに追加するか、config.jsonで`ffmpeg_path`を指定
+2. PATHに追加するか、`config.yaml`で`ffmpeg_path`を指定
 
 **Linux/Mac:**
 ```bash
@@ -39,10 +39,11 @@ brew install ffmpeg
 
 ```
 music-bot/
-├── music_bot.py           # メインプログラム
-├── ytdlp_wrapper.py       # yt-dlpラッパー（または services/ytdlp_wrapper.py）
-├── config.json            # 設定ファイル（初回起動時に自動生成）
-├── config-example.json    # 設定例（初回起動時に自動生成）
+├── bot.py                 # メインプログラム
+├── services/ytdlp_wrapper.py # yt-dlpラッパー
+├── config.yaml            # 設定ファイル
+├── config.default.yaml    # 設定例（初回起動時にコピーして使用）
+├── requirements.txt       # 依存関係リスト
 ├── cache/                 # キャッシュディレクトリ（自動生成）
 └── nico_cookies.txt       # ニコニコ動画用Cookie（オプション、自動生成）
 ```
@@ -78,33 +79,19 @@ music-bot/
 
 ## 使い方
 
-### 初回起動
+### 初回起動と設定
 
-```bash
-python music_bot.py
-```
-
-初回起動時：
-1. `config-example.json`が自動生成されます
-2. `config-example.json`が`config.json`にコピーされます
-3. プログラムが終了するので、`config.json`を編集してください
-
-### 設定ファイルの編集
-
-`config.json`を開いて、最低限以下を設定：
-
-```json
-{
-  "bot": {
-    "token": "YOUR_BOT_TOKEN_HERE"  // ← ここにBotトークンを貼り付け
-  }
-}
-```
+1. `config.default.yaml` を `config.yaml` としてコピーします。
+2. `config.yaml` を開いて、`token` の値をあなたのBotトークンに置き換えます。
+   ```yaml
+   token: "YOUR_BOT_TOKEN_HERE"
+   ```
+3. 必要に応じて、`music` セクションの設定（`default_volume`, `ffmpeg_path` など）を調整します。
 
 ### Botの起動
 
 ```bash
-python music_bot.py
+python bot.py
 ```
 
 ## コマンド一覧
@@ -118,6 +105,7 @@ python music_bot.py
 | `/resume` | 再生再開 |
 | `/stop` | 再生停止＆キュークリア |
 | `/skip` | 現在の曲をスキップ |
+| `/seek <時間>` | 指定時刻に移動 (例: `1:30` または `90`) |
 | `/volume <0-200>` | 音量変更 |
 
 ### 📋 キュー管理
@@ -160,33 +148,24 @@ python music_bot.py
 - FFmpegが正しくインストールされているか確認
 - Botがボイスチャンネルに接続する権限があるか確認
 
-### エラー: ytdlp_wrapperが見つからない
-- `ytdlp_wrapper.py`が同じディレクトリまたは`services/`ディレクトリにあるか確認
+### エラー: 必須コンポーネントのインポートに失敗しました。
+- `requirements.txt` に記載されているすべてのパッケージがインストールされているか確認してください。
+- 特に `PyYAML` がインストールされているか確認してください。
 
 ## カスタマイズ
 
-`config.json`で以下の設定が可能：
+`config.yaml`で以下の設定が可能：
 
-```json
-{
-  "music": {
-    "ffmpeg_path": "ffmpeg",           // FFmpegのパス
-    "auto_leave_timeout": 10,          // 自動退出までの秒数
-    "max_queue_size": 9000,            // 最大キューサイズ
-    "default_volume": 50,              // デフォルト音量 (0-200)
-    "messages": {                      // メッセージのカスタマイズ
-      // 各種メッセージをカスタマイズ可能
-    }
-  }
-}
+```yaml
+music:
+  ffmpeg_path: "ffmpeg"           # FFmpegのパス
+  auto_leave_timeout: 300         # 自動退出までの秒数
+  max_queue_size: 1000            # 最大キューサイズ
+  default_volume: 20              # デフォルト音量 (0-200)
+  messages:                       # メッセージのカスタマイズ
+    # 各種メッセージをカスタマイズ可能
 ```
 
 ## ライセンス
 
 このプログラムはMITライセンスで提供されています。
-
-## 注意事項
-
-- 著作権を遵守してご利用ください
-- Botの使用は各サーバーのルールに従ってください
-- 大量のリクエストは避け、適切に使用してください
