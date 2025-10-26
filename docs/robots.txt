@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://coffin399.github.io/music-bot-arona/sitemap.xml
